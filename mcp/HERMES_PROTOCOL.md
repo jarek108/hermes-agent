@@ -13,8 +13,8 @@ The unified header format automatically attached to all messages is:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | **External (MCP)** | One-time | Static Text (`M`) | `[🤖 E_M]` | Python script sends an alert via MCP. |
 | 2 | **External (MCP)** | One-time | LLM Generated (`AUTO`) | `[🤖 E_GF3.P]` | Python script asks MCP to summarize logs. |
-| 3 | **Hermes Native** | One-time | Static Text (`M`) | `[🤖 M]` | CLI `tools run send_message` command. |
-| 4 | **Hermes Native** | One-time | LLM Generated (`AUTO`) | `[🤖 GF3.P]` | `hermes "reply to whatsapp"` |
+| 3 | **Hermes Native**<br>- `CLI` (Terminal tool run)<br>- `TEST` (Test harness) | One-time | Static Text (`M`) | `[🤖 M]` | CLI `tools run send_message` command. |
+| 4 | **Hermes Native**<br>- `CLI` (Autonomous prompt)<br>- `ANSW` (Gateway reply)<br>- `ORDR` (TUI command)<br>- `DONE` (Sub-agent) | One-time | LLM Generated (`AUTO`) | `[🤖 GF3.P]` | `hermes "reply to whatsapp"` |
 | 5 | **Hermes Cron** | Scheduled | Static/Verbatim (`M`) | `[🤖 C_M]` | A `no_agent=True` cron script outputs an alert. |
 | 6 | **Hermes Cron** | Scheduled | LLM Generated (`AUTO`) | `[🤖 C_GF3.P]` | A scheduled LLM task finishes a report. |
 
