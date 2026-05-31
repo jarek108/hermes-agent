@@ -4423,6 +4423,41 @@ class BasePlatformAdapter(ABC):
         return content
     
     @staticmethod
+    def _apply_unified_header(content: str) -> str:
+        """Prepends a unified [🤖 FLAGS_MODEL] header based on execution context."""
+        import os
+        # E (External). Empty if Hermes native.
+        source = os.getenv("HERMES_COMM_SOURCE", "")
+        
+        # C (Cron). Empty if One-time.
+        is_native_cron = os.getenv("HERMES_CRON_JOB_ID") is not None
+        context = "C" if (is_native_cron or os.getenv("HERMES_COMM_CONTEXT") == "C") else ""
+
+        model_env = os.getenv("HERMES_COMM_MODEL", "AUTO")
+
+        model_code = "M"
+        if model_env != "M":
+            try:
+                from hermes_cli.config import load_config
+                cfg = load_config()
+                model_name = cfg.get("model", {}).get("default", "UNK").lower()
+                
+                # Naming System: G=Gemini, F=Flash, P=Pro
+                if "gemini" in model_name:
+                    ver = "3" if "3" in model_name else "2" if "2" in model_name else "1.5"
+                    tier = "F" if "flash" in model_name else "P" if "pro" in model_name else ""
+                    suffix = ".P" if "preview" in model_name else ".0"
+                    model_code = f"G{tier}{ver}{suffix}"
+                else:
+                    model_code = model_name[:5].upper()
+            except:
+                model_code = "LLM"
+
+        flags = f"{source}{context}"
+        header = f"[🤖 {flags}_{model_code}]" if flags else f"[🤖 {model_code}]"
+        return f"{header}\n\n{content}"
+
+    @staticmethod
     def truncate_message(
         content: str,
         max_length: int = 4096,
@@ -4447,6 +4482,11 @@ class BasePlatformAdapter(ABC):
         Returns:
             List of message chunks
         """
+        if not content:
+            return []
+            
+        content = BasePlatformAdapter._apply_unified_header(content)
+
         _len = len_fn or len
         if _len(content) <= max_length:
             return [content]
