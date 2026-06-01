@@ -4656,6 +4656,26 @@ class GatewayRunner:
             finally:
                 _clear_planned_restart_notification()
 
+        # Start MCP Server via isolated subprocess (to prevent thread/db locks)
+        try:
+            import subprocess
+            import sys
+            import os as _os
+            from hermes_cli.gateway import PROJECT_ROOT
+
+            mcp_script = _os.path.join(PROJECT_ROOT, "mcp_server", "hermes_mcp_server.py")
+            
+            # Spawn detached from Python's internal event loop, but bound to the parent process tree
+            self._mcp_subprocess = subprocess.Popen(
+                [sys.executable, mcp_script, "--transport", "sse"],
+                cwd=PROJECT_ROOT,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+            logger.info("MCP server spawned in background (PID: %s)", self._mcp_subprocess.pid)
+        except Exception as e:
+            logger.warning("Failed to spawn MCP server process: %s", e)
+
         # Automatically continue fresh sessions that were interrupted by the
         # previous gateway restart/shutdown.  The resume_pending flag is cleared
         # by the normal successful-turn path, so a failed auto-resume remains
@@ -6297,6 +6317,15 @@ class GatewayRunner:
                     cleanup_all_browsers()
                 except Exception as _e:
                     logger.debug("cleanup_all_browsers (%s) error: %s", phase, _e)
+
+                # Ensure our child MCP process is terminated cleanly
+                _mcp_proc = getattr(self, "_mcp_subprocess", None)
+                if _mcp_proc:
+                    try:
+                        _mcp_proc.terminate()
+                        logger.info("Shutdown (%s): Terminated MCP server (PID: %s)", phase, _mcp_proc.pid)
+                    except Exception as _e:
+                        logger.debug("Shutdown (%s): MCP server termination error: %s", phase, _e)
 
             logger.info(
                 "Stopping gateway%s...",

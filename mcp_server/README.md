@@ -4,14 +4,30 @@ The Model Context Protocol (MCP) Bridge allows external scripts (like Python sta
 
 It exposes core Hermes tools as structured JSON-RPC methods, enabling seamless and lightning-fast communication without the overhead of booting the Hermes CLI for every execution.
 
+## Context-Aware Prompt Execution
+
+When using the `prompt` parameter in `send_message`, the MCP server uses a smart target-resolution pipeline to run the prompt *in the context of the user's active conversation*:
+
+1. **Target Resolution:** The `target` string (e.g., `telegram`) is evaluated exactly as it would be for a standard message send. It maps to a specific `Platform` and numeric `chat_id`.
+2. **Session Lookup:** The system builds the deterministic session key (e.g., `agent:main:telegram:dm:12345`) and finds its corresponding active SQLite session ID from the `SessionStore`.
+3. **History Hydration:** The server reads the full conversation history from `state.db`.
+4. **Contextual Execution:** A headless `AIAgent` is instantiated with this history. When your `prompt` executes, the agent is fully aware of recent messages in that specific chat. 
+   - *Example:* If you send `prompt="Summarize our conversation"` to `telegram`, the agent summarizes the actual Telegram chat history before sending the response back to Telegram.
+
 ## Available Tools
 
 ### `send_message`
 Sends a message to a connected messaging platform, or lists available delivery targets.
 
-**Context & State Warning:**
-This tool acts as a stateless delivery pipe. If you supply a `prompt`, the MCP server will spawn a completely blank, headless `AIAgent` to generate the text before delivering it. **It does not have access to the conversation history of the target session.**
-For example, if you send `prompt="Reply to the last message"`, the agent will not know what the last message was, because the text generation phase is fully isolated from the delivery phase. If you require full conversational context, you must trigger a native Hermes agent workflow rather than using the MCP `send_message` tool.
+## Architecture and Lifecycle
+
+The Hermes MCP Bridge runs as a **Server-Sent Events (SSE) FastMCP web server** spawned as an isolated subprocess by the primary Hermes Gateway.
+
+- **Unified Lifecycle**: When you start Hermes (`hermes gateway start`), it automatically spins up the FastMCP SSE server on `http://127.0.0.1:8123/sse` as a detached subprocess. When Hermes stops, the MCP server is cleanly terminated.
+- **Process Isolation**: Because the MCP server runs in its own isolated Python process, it safely avoids `asyncio` thread contention and SQLite `OperationalError: database is locked` errors, ensuring maximum stability.
+- **Multi-Agent Ready**: Multiple external agents (OpenCode, Claude Desktop, Cursor) can connect to the single `http://127.0.0.1:8123/sse` endpoint simultaneously. For OpenCode, configure this using the `"remote"` type.
+
+*(Note: Prior iterations used a `stdio` subprocess model where the calling agent owned the lifecycle, which led to duplicated API keys and isolated logs. Embedding it into the Gateway lifecycle centralizes all Hermes operations into a single instance.)*
 
 **Arguments:**
 *   `target` (string): Delivery target. Format: `'platform'` (uses home channel) or `'platform:#channel-name'`. Examples: `'telegram'`, `'whatsapp'`, `'discord:#bot-home'`.
@@ -27,6 +43,12 @@ Create, list, or delete scheduled Hermes cron jobs. Cron jobs created here are e
 *   `schedule` (string, optional): Cron expression (e.g., `'0 9 * * *'` for daily at 9am). Used only for `'create'`.
 *   `prompt` (string, optional): The task for the agent to execute on schedule. Used only for `'create'`.
 *   `job_id` (string, optional): The ID of the job to delete. Used only for `'delete'`.
+
+### `delegate_to_hermes`
+Delegate a complex, multi-step task to the Hermes AI agent for autonomous execution. Use this tool when you need Hermes to use its own internal memory, custom skills, or figure out how to accomplish a goal using its full suite of capabilities.
+
+**Arguments:**
+*   `prompt` (string): Natural language description of the task for the headless Hermes `AIAgent` to execute. Returns a concise summary of the results.
 
 ### `computer_use`
 Control the local OS (mouse, keyboard, app focus) using Hermes' OS-level drivers.
