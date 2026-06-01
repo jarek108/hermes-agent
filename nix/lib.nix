@@ -15,7 +15,7 @@ let
 
   # Single npm deps fetch from the workspace root lockfile.
   # All workspace packages share this derivation.
-  npmDepsHash = "sha256-Dvqaqwba2k3jfG86ENJz6x4OWY0l2m5D/kZNWW5kr10=";
+  npmDepsHash = "sha256-Sj9hYXs/9QWKAWL9jF78yJOUl0z9J6b3n5E4wYnWdws=";
 
   npmDeps = pkgs.fetchNpmDeps {
     inherit src;
@@ -29,7 +29,6 @@ in
   #   patchPhase             — ensures root lockfile has exactly one trailing newline
   #   nativeBuildInputs      — [ updateLockfileScript ] (list, prepend with ++ for more)
   #   passthru.devShellHook  — stamp-checked npm install + hash auto-update
-  #   passthru.npmLockfile   — metadata for mkFixLockfiles
   #   nodejs                 — fixed nodejs version for all packages we use in the repo
   #
   # NOTE: npmConfigHook runs `diff` between the source lockfile and the
@@ -49,7 +48,6 @@ in
       folder, # repo-relative folder with package.json, e.g. "ui-tui"
       attr, # flake package attr, e.g. "tui"
       pname, # e.g. "hermes-tui"
-      nixFile ? "nix/${attr}.nix", # defaults to nix/<attr>.nix
     }:
     let
       # No sourceRoot — the workspace root (with the single package-lock.json)
@@ -104,9 +102,7 @@ in
           CI=true ${pkgs.lib.getExe' nodejs "npm"} install --workspaces
           ${pkgs.lib.getExe npm-lockfile-fix} ./package-lock.json
 
-          NIX_FILE="$REPO_ROOT/${nixFile}"
-          # No per-file hash anymore — the hash lives in lib.nix.
-          # Just rebuild to verify.
+          # Hash lives in lib.nix — just rebuild to verify.
           nix build .#${attr}
           echo "Lockfile updated and build verified for .#${attr}"
         '')
@@ -129,7 +125,6 @@ in
 
             # Auto-update the nix hash so it stays in sync with the lockfile
             echo "${pname}: prefetching npm deps..."
-            NIX_FILE="$REPO_ROOT/${nixFile}"
             if NEW_HASH=$(${pkgs.lib.getExe pkgs.prefetch-npm-deps} "package-lock.json" 2>/dev/null); then
               sed -i -E "s|npmDepsHash = \"sha256-[A-Za-z0-9+/=]+\";|npmDepsHash = \"$NEW_HASH\";|" "$REPO_ROOT/nix/lib.nix"
               echo "${pname}: updated hash to $NEW_HASH"
@@ -143,15 +138,10 @@ in
           unset -f _hermes_npm_stamp
         '';
 
-        npmLockfile = {
-          inherit attr folder nixFile;
-        };
       };
     };
 
-  # Aggregate `fix-lockfiles` bin from a list of packages carrying
-  #   passthru.npmLockfile = { attr; folder; nixFile; };
-  # Invocations:
+  # Build `fix-lockfiles` bin that checks/updates the single npmDepsHash
   #   fix-lockfiles --check   # exit 1 if any hash is stale
   #   fix-lockfiles --apply   # rewrite stale hashes in place
   #   fix-lockfiles           # alias of --apply
@@ -159,13 +149,8 @@ in
   # when set, so CI workflows can post a sticky PR comment directly.
   mkFixLockfiles =
     {
-      packages, # list of packages with passthru.npmLockfile
+      attr, # flake package attr for fallback verification build, e.g. "tui"
     }:
-    let
-      packagesWithLockfile = builtins.filter (p: p.passthru ? npmLockfile) packages;
-      entries = map (p: p.passthru.npmLockfile) packagesWithLockfile;
-      entryArgs = pkgs.lib.concatMapStringsSep " " (e: "\"${e.attr}:${e.folder}:${e.nixFile}\"") entries;
-    in
     pkgs.writeShellScriptBin "fix-lockfiles" ''
       set -uox pipefail
       MODE="''${1:---apply}"
@@ -178,8 +163,6 @@ in
           echo "usage: fix-lockfiles [--check|--apply]" >&2
           exit 2 ;;
       esac
-
-      ENTRIES=(${entryArgs})
 
       REPO_ROOT="$(git rev-parse --show-toplevel)"
       cd "$REPO_ROOT"
@@ -204,9 +187,7 @@ in
       NEW_HASH=$(${pkgs.lib.getExe pkgs.prefetch-npm-deps} "$LOCK_FILE" 2>/dev/null)
       if [ -z "$NEW_HASH" ]; then
         echo "prefetch-npm-deps failed, falling back to nix build" >&2
-        # Try any workspace package's npmDeps to get the hash
-        FIRST_ATTR="''${ENTRIES[0]%%:*}"
-        OUTPUT=$(nix build ".#''${FIRST_ATTR}.npmDeps" --no-link --print-build-logs 2>&1)
+        OUTPUT=$(nix build ".#${attr}.npmDeps" --no-link --print-build-logs 2>&1)
         STATUS=$?
         if [ "$STATUS" -eq 0 ]; then
           echo "ok (via nix build)"
@@ -247,9 +228,24 @@ in
 
       if [ "$MODE" = "--apply" ]; then
         sed -i -E "s|npmDepsHash = \"sha256-[^\"]+\";|npmDepsHash = \"$NEW_HASH\";|" "$LIB_FILE"
-        if ! nix build ".#''${FIRST_ATTR}.npmDeps" --no-link --print-build-logs; then
-          echo "verification build failed after hash update" >&2
-          exit 1
+        if ! nix build ".#${attr}.npmDeps" --no-link --print-build-logs 2>/dev/null; then
+          # prefetch-npm-deps may disagree with fetchNpmDeps (it hashes
+          # the lockfile contents, not the full source tree).  Extract the
+          # correct hash from the nix build error and retry.
+          RETRY_OUTPUT=$(nix build ".#${attr}.npmDeps" --no-link --print-build-logs 2>&1)
+          CORRECT_HASH=$(echo "$RETRY_OUTPUT" | awk '/got:/ {print $2; exit}')
+          if [ -n "$CORRECT_HASH" ]; then
+            echo "prefetch-npm-deps gave $NEW_HASH but nix wants $CORRECT_HASH — retrying" >&2
+            sed -i -E "s|npmDepsHash = \"sha256-[^\"]+\";|npmDepsHash = \"$CORRECT_HASH\";|" "$LIB_FILE"
+            if ! nix build ".#${attr}.npmDeps" --no-link --print-build-logs; then
+              echo "verification build failed after hash retry" >&2
+              exit 1
+            fi
+            NEW_HASH="$CORRECT_HASH"
+          else
+            echo "verification build failed after hash update" >&2
+            exit 1
+          fi
         fi
         FIXED=1
         echo "fixed"

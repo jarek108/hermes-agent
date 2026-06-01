@@ -96,7 +96,6 @@ stdenv.mkDerivation {
   '';
 
   passthru = {
-    npmLockfile = renderer.passthru.npmLockfile;
     devShellHook = renderer.passthru.devShellHook;
   };
 
