@@ -14,8 +14,8 @@ async def send_via_mcp(target: str, payload: str, is_prompt: bool = False, sourc
         args=[server_script],
         env={
             **os.environ,
-            "TELEGRAM_BOT_TOKEN": "8661141184:AAEG09t_0W6LyhoWKiPIV9hKqIXqMTaqkSs",
-            "TELEGRAM_ALLOWED_USERS": "8730703664",
+            "TELEGRAM_BOT_TOKEN": "YOUR_BOT_TOKEN_HERE",
+            "TELEGRAM_ALLOWED_USERS": "YOUR_CHAT_ID_HERE",
             "WHATSAPP_ENABLED": "true",
             "WHATSAPP_ALLOWED_USERS": "48792212997",
             "WHATSAPP_MODE": "self-chat"
