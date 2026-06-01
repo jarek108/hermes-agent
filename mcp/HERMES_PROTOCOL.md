@@ -11,10 +11,10 @@ The unified header format automatically attached to all messages is:
 
 | ID | Initiator | Execution | Payload | Resulting Header | Example Scenario |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | **External (MCP)** | One-time | Static Text (`M`) | `[🤖 E_M]` | Python script sends an alert via MCP. |
-| 2 | **External (MCP)** | One-time | LLM Generated (`AUTO`) | `[🤖 E_GF3.P]` | Python script asks MCP to summarize logs. |
-| 3 | **Hermes Native**<br>- `CLI` (Terminal tool run)<br>- `TEST` (Test harness) | One-time | Static Text (`M`) | `[🤖 M]` | CLI `tools run send_message` command. |
-| 4 | **Hermes Native**<br>- `CLI` (Autonomous prompt)<br>- `ANSW` (Gateway reply)<br>- `ORDR` (TUI command)<br>- `DONE` (Sub-agent) | One-time | LLM Generated (`AUTO`) | `[🤖 GF3.P]` | `hermes "reply to whatsapp"` |
+| 1 | **MCP** | One-time | Static Text (`M`) | `[🤖 MCP_M]` | Python script sends an alert via MCP. |
+| 2 | **MCP** | One-time | LLM Generated (`AUTO`) | `[🤖 MCP_GF3.P]` | Python script asks MCP to summarize logs. |
+| 3 | **CLI/Native**<br>- `CLI` (Terminal tool run)<br>- `TEST` (Test harness) | One-time | Static Text (`M`) | `[🤖 M]` | CLI `tools run send_message` command. |
+| 4 | **CLI/Native**<br>- `CLI` (Autonomous prompt)<br>- `ANSW` (Gateway reply)<br>- `ORDR` (TUI command)<br>- `DONE` (Sub-agent) | One-time | LLM Generated (`AUTO`) | `[🤖 GF3.P]` | `hermes "reply to whatsapp"` |
 | 5 | **Hermes Cron** | Scheduled | Static/Verbatim (`M`) | `[🤖 C_M]` | A `no_agent=True` cron script outputs an alert. |
 | 6 | **Hermes Cron** | Scheduled | LLM Generated (`AUTO`) | `[🤖 C_GF3.P]` | A scheduled LLM task finishes a report. |
 
@@ -23,35 +23,35 @@ The unified header format automatically attached to all messages is:
 ### Component Legend
 *   **A**: External Caller (Python script or OpenCode LLM)
 *   **B**: MCP Bridge (`mcp/hermes_mcp_server.py`)
-*   **C**: Hermes Native Engine (`cli.py`, cron executor, or `AIAgent`)
+*   **C**: CLI/Native Engine (`cli.py`, cron executor, or `AIAgent`)
 *   **D**: Send Message Tool (`send_message_tool.py`)
 *   **E**: Header Formatter (`gateway/platforms/base.py`)
 *   **F**: Target Platform (Telegram, WhatsApp, etc.)
 
 ---
 
-### Row 1: External | Static | `[🤖 E_M]`
+### Row 1: MCP | Static | `[🤖 MCP_M]`
 1. **A** calls MCP `send_message(message="Alert")`.
-2. **B** **sets `os.environ["HERMES_COMM_SOURCE"] = "E"` and `os.environ["HERMES_COMM_MODEL"] = "M"`**.
+2. **B** **sets `os.environ["HERMES_COMM_SOURCE"] = "MCP"` and `os.environ["HERMES_COMM_MODEL"] = "M"`**.
 3. **B** passes text to **D**.
 4. **D** calls **E**.
-5. **E** sees `E` and `M`, formats `[🤖 E_M]`, and delivers to **F**.
+5. **E** sees `MCP` and `M`, formats `[🤖 MCP_M]`, and delivers to **F**.
 
-### Row 2: External | LLM (`AUTO`) | `[🤖 E_GF3.P]`
+### Row 2: MCP | LLM (`AUTO`) | `[🤖 MCP_GF3.P]`
 1. **A** calls MCP `send_message(prompt="Summarize logs")`.
 2. **B** detects prompt, boots headless `AIAgent`, generates text: *"Logs clear."*
-3. **B** **sets `os.environ["HERMES_COMM_SOURCE"] = "E"` and `os.environ["HERMES_COMM_MODEL"] = "AUTO"`**.
+3. **B** **sets `os.environ["HERMES_COMM_SOURCE"] = "MCP"` and `os.environ["HERMES_COMM_MODEL"] = "AUTO"`**.
 4. **B** passes generated text to **D**.
 5. **D** calls **E**.
-6. **E** sees `E` and `AUTO`, detects active model, formats `[🤖 E_GF3.P]`, and delivers to **F**.
+6. **E** sees `MCP` and `AUTO`, detects active model, formats `[🤖 MCP_GF3.P]`, and delivers to **F**.
 
-### Row 3: Hermes Native | Static | `[🤖 M]`
+### Row 3: CLI/Native | Static | `[🤖 M]`
 1. **C** (CLI) invoked: `hermes tools run send_message --message "Test"`. (No env vars are set).
 2. **C** passes text to **D**.
 3. **D** calls **E**.
 4. **E** sees empty Source, empty Context, empty Model (defaulting to `M`), formats `[🤖 M]`, and delivers to **F**.
 
-### Row 4: Hermes Native | LLM (`AUTO`) | `[🤖 GF3.P]`
+### Row 4: CLI/Native | LLM (`AUTO`) | `[🤖 GF3.P]`
 1. **C** (`AIAgent`) invoked via direct user chat or CLI: `hermes "reply to whatsapp"`. (No env vars are set).
 2. **C** generates reply text.
 3. **C** autonomously calls **D**.

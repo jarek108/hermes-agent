@@ -4426,7 +4426,7 @@ class BasePlatformAdapter(ABC):
     def _apply_unified_header(content: str) -> str:
         """Prepends a unified [🤖 FLAGS_MODEL] header based on execution context."""
         import os
-        # E (External). Empty if Hermes native.
+        # MCP. Empty if Hermes native.
         source = os.getenv("HERMES_COMM_SOURCE", "")
         
         # C (Cron). Empty if One-time.

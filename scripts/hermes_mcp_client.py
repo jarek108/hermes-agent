@@ -4,7 +4,7 @@ import asyncio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async def send_via_mcp(target: str, payload: str, is_prompt: bool = False, source: str = "E"):
+async def send_via_mcp(target: str, payload: str, is_prompt: bool = False, source: str = "MCP"):
     # Path to the Hermes Python environment and our MCP server script
     python_exe = r"C:\Users\chojn\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe"
     server_script = r"E:\projects_large\my_hermes\mcp\hermes_mcp_server.py"
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     payload = sys.argv[2]
     
     is_prompt = "--prompt" in sys.argv
-    source = "E"
+    source = "MCP"
     
     # Simple arg parsing for optional source override
     for arg in sys.argv[3:]:

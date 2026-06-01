@@ -60,14 +60,14 @@ def web_extract(urls: list[str]) -> str:
     return str(web_extract_tool(urls))
 
 @mcp.tool()
-def send_message(target: str, message: str = "", prompt: str = "", source: str = "E") -> str:
+def send_message(target: str, message: str = "", prompt: str = "", source: str = "MCP") -> str:
     """Send a message to a connected messaging platform, or list available targets.
     
     Args:
         target: Delivery target. Format: 'platform' (uses home channel), 'platform:#channel-name'. Examples: 'telegram', 'discord:#bot-home'.
         message: Static text to send. (Provide exactly one of message OR prompt).
         prompt: LLM prompt to generate the message text. (Provide exactly one of message OR prompt).
-        source: Single char source code for the header (e.g., 'E' for External/MCP).
+        source: Single char/string source code for the header (e.g., 'MCP').
     """
     import os
     
