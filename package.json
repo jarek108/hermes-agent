@@ -6,6 +6,7 @@
   "workspaces": [
     "apps/*",
     "ui-tui",
+    "ui-tui/packages/*",
     "web"
   ],
   "scripts": {
